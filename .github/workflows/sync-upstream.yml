@@ -1,0 +1,55 @@
+name: Sync dep with upstream
+
+on:
+  schedule:
+    # Daily at 6:00 UTC (~14:00 Beijing), before Alas auto-restart
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dep branch
+        uses: actions/checkout@v4
+        with:
+          ref: dep
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/LmeSzinc/AzurLaneAutoScript.git
+          git fetch upstream master
+
+      - name: Check if rebase is needed
+        id: check
+        run: |
+          MERGE_BASE=$(git merge-base dep upstream/master)
+          UPSTREAM_TIP=$(git rev-parse upstream/master)
+          if [ "$MERGE_BASE" = "$UPSTREAM_TIP" ]; then
+            echo "already-synced=true" >> $GITHUB_OUTPUT
+          else
+            echo "already-synced=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rebase dep onto upstream/master
+        if: steps.check.outputs.already-synced == 'false'
+        run: |
+          git rebase --onto upstream/master HEAD~$(git rev-list --count HEAD ^upstream/master) HEAD || {
+            echo "::error::Rebase conflict detected. Please resolve manually:"
+            echo "::error::  git fetch upstream master"
+            echo "::error::  git rebase --onto upstream/master HEAD~N HEAD"
+            git rebase --abort
+            exit 1
+          }
+
+      - name: Force push dep
+        if: steps.check.outputs.already-synced == 'false'
+        run: |
+          git push --force origin dep
