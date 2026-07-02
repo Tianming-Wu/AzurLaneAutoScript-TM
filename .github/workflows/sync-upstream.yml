@@ -41,10 +41,11 @@ jobs:
       - name: Rebase dep onto upstream/master
         if: steps.check.outputs.already-synced == 'false'
         run: |
-          git rebase --onto upstream/master HEAD~$(git rev-list --count HEAD ^upstream/master) HEAD || {
+          git rebase --onto upstream/master "$(git merge-base HEAD upstream/master)" || {
             echo "::error::Rebase conflict detected. Please resolve manually:"
             echo "::error::  git fetch upstream master"
-            echo "::error::  git rebase --onto upstream/master HEAD~N HEAD"
+            echo "::error::  git rebase --onto upstream/master \$(git merge-base HEAD upstream/master)"
+            git rebase --abort
             git rebase --abort
             exit 1
           }
